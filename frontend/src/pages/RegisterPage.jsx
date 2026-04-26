@@ -1,0 +1,281 @@
+import { useState, useRef } from 'react'
+import { register, verifyOtp } from '../api'
+import { useToast } from '../hooks/useToast'
+import { ToastContainer, BtnContent } from '../components/UI'
+
+const POPULAR_CITIES = ['Delhi', 'Mumbai', 'Bangalore', 'Chandigarh', 'Lahore', 'Karachi', 'Islamabad']
+
+export default function RegisterPage({ onRegistered }) {
+  const [step, setStep] = useState('form') // 'form' | 'otp'
+  const [form, setForm] = useState({ name: '', phone: '', location: '' })
+  const [otp, setOtp] = useState(['', '', '', '', '', ''])
+  const [demoOtp, setDemoOtp] = useState('')
+  const [loading, setLoading] = useState(false)
+  const otpRefs = useRef([])
+  const { toasts, success, error, info } = useToast()
+
+  // ── Form helpers ────────────────────────────────────────────
+  const updateForm = (field) => (e) => setForm(p => ({ ...p, [field]: e.target.value }))
+
+  const requestLocation = () => {
+    if (!navigator.geolocation) {
+      info('Geolocation not available — enter city manually')
+      return
+    }
+    info('Detecting your location…')
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
+          )
+          const data = await res.json()
+          const city = data.address?.city || data.address?.town || data.address?.state || 'Detected Location'
+          setForm(p => ({ ...p, location: city }))
+          success(`📍 Location: ${city}`)
+        } catch {
+          setForm(p => ({ ...p, location: `${lat.toFixed(4)}, ${lng.toFixed(4)}` }))
+        }
+      },
+      () => info('Could not detect location — please enter manually')
+    )
+  }
+
+  // ── Submit registration ─────────────────────────────────────
+  const handleRegister = async (e) => {
+    e.preventDefault()
+    if (!form.name.trim() || !form.phone.trim()) {
+      error('Name and phone number are required')
+      return
+    }
+    if (form.phone.replace(/\D/g, '').length < 10) {
+      error('Enter a valid phone number (10+ digits)')
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await register(form)
+      if (res.data.demoOtp) {
+        setDemoOtp(res.data.demoOtp)
+        success(`Demo OTP: ${res.data.demoOtp} (auto-filled below)`)
+        // Auto-fill OTP in demo mode
+        const digits = res.data.demoOtp.split('')
+        setOtp(digits)
+      } else {
+        success('OTP sent to your phone!')
+      }
+      setStep('otp')
+    } catch (err) {
+      error(err.response?.data?.error || 'Registration failed — is the backend running?')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ── OTP input handling ──────────────────────────────────────
+  const handleOtpChange = (index, value) => {
+    if (!/^\d?$/.test(value)) return
+    const newOtp = [...otp]
+    newOtp[index] = value
+    setOtp(newOtp)
+    if (value && index < 5) otpRefs.current[index + 1]?.focus()
+  }
+
+  const handleOtpKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      otpRefs.current[index - 1]?.focus()
+    }
+  }
+
+  // ── Verify OTP ──────────────────────────────────────────────
+  const handleVerify = async (e) => {
+    e.preventDefault()
+    const otpStr = otp.join('')
+    if (otpStr.length < 6) {
+      error('Enter the complete 6-digit OTP')
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await verifyOtp({ phone: form.phone, otp: otpStr })
+      success('✅ Phone verified! Welcome to Manzil AI!')
+      setTimeout(() => onRegistered(res.data.user), 800)
+    } catch (err) {
+      error(err.response?.data?.error || 'Invalid OTP')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="screen" style={{ justifyContent: 'center', minHeight: '100dvh' }}>
+
+      {/* ── Brand ─────────────────────────────────────────── */}
+      <div className="brand">
+        <span className="brand-icon">🧭</span>
+        <h1 className="brand-title">Manzil AI</h1>
+        <p className="brand-tagline">AI-powered safety navigation</p>
+      </div>
+
+      {/* ── Feature Pills ─────────────────────────────────── */}
+      <div className="feature-pills">
+        {['📨 SMS Alerts', '🤖 AI Safety', '🌦️ Weather', '🏥 Emergency Spots', '✈️ Offline-Safe'].map(f => (
+          <span key={f} className="feature-pill">{f}</span>
+        ))}
+      </div>
+
+      <div style={{ height: 24 }} />
+
+      {/* ── Step: Registration Form ────────────────────────── */}
+      {step === 'form' && (
+        <div className="card card-glow" style={{ animation: 'slideInUp 0.5s ease' }}>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: 4 }}>Create Account</h2>
+          <p className="text-sm color-muted" style={{ marginBottom: 20 }}>Register to start your safe journey</p>
+
+          <form onSubmit={handleRegister}>
+            {/* Name */}
+            <div className="input-group">
+              <label className="input-label">Your Name</label>
+              <div className="input-wrapper">
+                <span className="input-icon">👤</span>
+                <input
+                  id="reg-name"
+                  className="input-field"
+                  type="text"
+                  placeholder="e.g. Rahul Kumar"
+                  value={form.name}
+                  onChange={updateForm('name')}
+                  autoComplete="name"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Phone */}
+            <div className="input-group">
+              <label className="input-label">Phone Number</label>
+              <div className="input-wrapper">
+                <span className="input-icon">📱</span>
+                <input
+                  id="reg-phone"
+                  className="input-field"
+                  type="tel"
+                  placeholder="+91 98765 43210"
+                  value={form.phone}
+                  onChange={updateForm('phone')}
+                  autoComplete="tel"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Location */}
+            <div className="input-group">
+              <div className="flex-between mb-8">
+                <label className="input-label">Your City / Location</label>
+                <button
+                  type="button"
+                  onClick={requestLocation}
+                  style={{
+                    background: 'none', border: 'none', color: 'var(--accent-secondary)',
+                    fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600
+                  }}
+                >
+                  📍 Auto-detect
+                </button>
+              </div>
+              <div className="input-wrapper">
+                <span className="input-icon">🏙️</span>
+                <input
+                  id="reg-location"
+                  className="input-field"
+                  type="text"
+                  placeholder="e.g. Delhi, Mumbai"
+                  value={form.location}
+                  onChange={updateForm('location')}
+                  list="cities-list"
+                />
+                <datalist id="cities-list">
+                  {POPULAR_CITIES.map(c => <option key={c} value={c} />)}
+                </datalist>
+              </div>
+            </div>
+
+            <div style={{ height: 8 }} />
+            <button id="btn-register" className="btn btn-primary" type="submit" disabled={loading}>
+              <BtnContent loading={loading}>
+                <span>📲</span><span>Send OTP</span>
+              </BtnContent>
+            </button>
+          </form>
+
+          <p className="text-xs color-muted text-center mt-12">
+            By registering you agree to receive SMS safety alerts
+          </p>
+        </div>
+      )}
+
+      {/* ── Step: OTP Verification ─────────────────────────── */}
+      {step === 'otp' && (
+        <div className="card card-glow" style={{ animation: 'slideInUp 0.5s ease' }}>
+          <button
+            onClick={() => setStep('form')}
+            style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', fontSize: '0.875rem', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            ← Back
+          </button>
+
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: 4 }}>Verify OTP</h2>
+          <p className="text-sm color-muted" style={{ marginBottom: 6 }}>
+            6-digit code sent to <strong style={{ color: 'var(--text-primary)' }}>{form.phone}</strong>
+          </p>
+
+          {demoOtp && (
+            <div className="badge badge-info" style={{ marginBottom: 16, fontSize: '0.8rem' }}>
+              🎯 Demo OTP: <strong>{demoOtp}</strong> (auto-filled)
+            </div>
+          )}
+
+          <form onSubmit={handleVerify}>
+            <div className="otp-container">
+              {otp.map((digit, i) => (
+                <input
+                  key={i}
+                  id={`otp-${i}`}
+                  ref={el => otpRefs.current[i] = el}
+                  className={`otp-input ${digit ? 'filled' : ''}`}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={e => handleOtpChange(i, e.target.value)}
+                  onKeyDown={e => handleOtpKeyDown(i, e)}
+                  autoFocus={i === 0}
+                />
+              ))}
+            </div>
+
+            <div style={{ height: 20 }} />
+            <button id="btn-verify-otp" className="btn btn-primary" type="submit" disabled={loading}>
+              <BtnContent loading={loading}>
+                <span>✅</span><span>Verify & Continue</span>
+              </BtnContent>
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-ghost mt-8"
+              onClick={handleRegister}
+              disabled={loading}
+            >
+              🔄 Resend OTP
+            </button>
+          </form>
+        </div>
+      )}
+
+      <ToastContainer toasts={toasts} />
+    </div>
+  )
+}
