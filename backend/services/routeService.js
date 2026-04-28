@@ -171,12 +171,43 @@ async function getRoute(origin, destination) {
     try {
       const route = await getRealRoute(origin, destination);
 
-      // Get emergency spots at the midpoint
+      // Sample 4 evenly-spaced points along the route for emergency spots
       if (route.waypoints.length > 0) {
-        const mid = route.waypoints[Math.floor(route.waypoints.length / 2)];
+        const wps = route.waypoints;
+        const indices = [
+          0,
+          Math.floor(wps.length * 0.33),
+          Math.floor(wps.length * 0.66),
+          wps.length - 1,
+        ].filter((v, i, arr) => arr.indexOf(v) === i); // dedupe indices
+
         try {
-          route.emergencySpots = await getNearbyEmergencySpots(mid.lat, mid.lng);
-          console.log(`🏥 [Overpass] Found ${route.emergencySpots.length} emergency spots`);
+          // Query all sample points in parallel
+          const spotsArrays = await Promise.all(
+            indices.map(i => getNearbyEmergencySpots(wps[i].lat, wps[i].lng))
+          );
+
+          // Flatten + deduplicate by name (avoid same hospital showing twice)
+          const seen = new Set();
+          const allSpots = [];
+          for (const spots of spotsArrays) {
+            for (const sp of spots) {
+              const key = sp.name.toLowerCase().trim();
+              if (!seen.has(key)) {
+                seen.add(key);
+                allSpots.push(sp);
+              }
+            }
+          }
+
+          // Sort: hospitals first, then police; within each type sort by distance
+          allSpots.sort((a, b) => {
+            if (a.type !== b.type) return a.type === 'hospital' ? -1 : 1;
+            return parseFloat(a.distance) - parseFloat(b.distance);
+          });
+
+          route.emergencySpots = allSpots.slice(0, 8);
+          console.log(`🏥 [Overpass] Found ${route.emergencySpots.length} route-based emergency spots`);
         } catch (e) {
           console.warn('Overpass API failed:', e.message);
           route.emergencySpots = mockRoute.emergencySpots;
