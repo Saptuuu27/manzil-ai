@@ -1,7 +1,6 @@
 /**
  * Weather Routes
- * GET  /api/weather/:location
- * POST /api/weather/update   — fetch weather + send SMS
+ * POST /api/weather/update — Fetch weather and optionally send via SMS
  */
 
 const express = require('express');
@@ -9,44 +8,40 @@ const router = express.Router();
 const { getWeather } = require('../services/weatherService');
 const { sendSMS } = require('../services/smsService');
 
-// ─── Get Weather ───────────────────────────────────────────────
-router.get('/:location', async (req, res) => {
-  try {
-    const weather = await getWeather(req.params.location);
-    res.json({ success: true, weather });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ─── Send Weather Update via SMS ───────────────────────────────
 router.post('/update', async (req, res) => {
   try {
     const { phone, location, name } = req.body;
-    if (!phone || !location) {
-      return res.status(400).json({ success: false, error: 'Phone and location required' });
+
+    if (!location) {
+      return res.status(400).json({ success: false, error: 'Location is required' });
     }
 
     const weather = await getWeather(location);
 
-    let riskMsg = '';
-    if (weather.condition === 'Rain' || weather.condition === 'Storm') {
-      riskMsg = ' ⚠️ Caution: Poor driving conditions!';
-    } else if (weather.condition === 'Fog') {
-      riskMsg = ' ⚠️ Low visibility, drive slowly!';
+    // Send weather SMS if phone provided
+    if (phone) {
+      const visibilityStr = weather.visibility != null ? `, Visibility: ${weather.visibility}km` : '';
+      const msg = `${weather.icon} Manzil AI Weather Update for ${weather.cityName || location}: ${weather.condition} — ${weather.temp}°C (feels ${weather.feelsLike || weather.temp}°C), Humidity: ${weather.humidity}%, Wind: ${weather.windSpeed}km/h${visibilityStr}. Drive safely, ${name || 'traveler'}!`;
+      await sendSMS(phone, msg);
     }
-
-    const msg = `${weather.icon} Manzil AI Weather Update for ${location}: ${weather.condition} — ${weather.description}. Temp: ${weather.temp}°C, Wind: ${weather.windSpeed} km/h.${riskMsg}`;
-
-    const smsEntry = await sendSMS(phone, msg);
 
     res.json({
       success: true,
-      message: 'Weather update sent via SMS',
       weather,
-      sms: smsEntry
+      location: weather.cityName || location,
     });
 
+  } catch (err) {
+    console.error('Weather route error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET weather (no SMS)
+router.get('/current/:location', async (req, res) => {
+  try {
+    const weather = await getWeather(req.params.location);
+    res.json({ success: true, weather });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

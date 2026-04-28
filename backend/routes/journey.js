@@ -1,6 +1,6 @@
 /**
  * Journey Routes
- * POST /api/journey/start   — Start journey tracking
+ * POST /api/journey/start   — Start journey tracking with real route
  * POST /api/journey/stop    — Stop journey
  * GET  /api/journey/status  — Get current journey status
  * GET  /api/journey/alerts  — Get all sent alerts
@@ -10,10 +10,10 @@ const express = require('express');
 const router = express.Router();
 const { sendSMS } = require('../services/smsService');
 const { analyzeRoute } = require('../services/aiService');
-const { getWeather } = require('../services/weatherService');
-const { generateMockRoute } = require('../services/routeService');
+const { getWeather, getWeatherForCoords } = require('../services/weatherService');
+const { getRoute, getNearbyEmergencySpots } = require('../services/routeService');
 
-// Active journeys store
+// ─── Active journeys store (in-memory) ────────────────────────
 const activeJourneys = new Map();
 
 // ─── Start Journey ─────────────────────────────────────────────
@@ -25,78 +25,107 @@ router.post('/start', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Phone and destination are required' });
     }
 
-    // Stop existing journey if any
+    // Stop any existing journey for this user
     if (activeJourneys.has(phone)) {
       clearInterval(activeJourneys.get(phone).intervalId);
+      activeJourneys.delete(phone);
     }
 
-    // Generate route
-    const route = generateMockRoute(origin || 'Current Location', destination);
+    console.log(`\n🚀 Journey started: ${name} (${phone})`);
+    console.log(`📍 ${origin || 'Current Location'} → ${destination}\n`);
+
+    // ── Fetch real route (Google Maps or mock) ─────────────────
+    const route = await getRoute(origin || 'Delhi', destination);
     const alerts = [];
 
-    console.log(`\n🚀 Journey started: ${name} (${phone}) → ${destination}`);
-    console.log(`📍 Route: ${route.distance} | ~${route.duration}\n`);
+    // ── Send journey start SMS ─────────────────────────────────
+    const startMsg = `🚀 Manzil AI: Journey started! ${route.origin?.split(',')[0] || origin} → ${destination}. Distance: ${route.distance}, ETA: ${route.duration}. Stay safe, ${name}! 🧭`;
+    let startAlert;
+    try {
+      startAlert = await sendSMS(phone, startMsg);
+      alerts.push({ ...startAlert, type: 'journey_start', message: startMsg });
+    } catch (e) {
+      console.warn('⚠️ Journey start SMS failed, continuing anyway:', e.message);
+      alerts.push({ status: 'failed', provider: 'none', type: 'journey_start', message: startMsg });
+    }
 
-    // Send initial journey start SMS
-    const startMsg = `🚀 Manzil AI: Journey started! ${origin || 'Your location'} → ${destination}. Distance: ${route.distance}. Stay safe, ${name}!`;
-    const startAlert = await sendSMS(phone, startMsg);
-    alerts.push({ ...startAlert, type: 'journey_start' });
-
-    // ── Background Tracking Loop ──────────────────────────────
-    // Every 15 seconds, analyze route and send alerts (demo speed)
+    // ── Background Alert Loop ──────────────────────────────────
     let checkCount = 0;
     const intervalId = setInterval(async () => {
       checkCount++;
+      const j = activeJourneys.get(phone);
+      if (!j || j.status !== 'active') {
+        clearInterval(intervalId);
+        return;
+      }
 
-      // Stop after 10 checks (2.5 min in demo)
+      // Auto-complete after 10 checks (2.5 min demo)
       if (checkCount > 10) {
         clearInterval(intervalId);
-        const endMsg = `✅ Manzil AI: You have arrived at ${destination}! Journey complete. Stay safe!`;
+        const endMsg = `✅ Manzil AI: You've arrived at ${destination}! Journey complete in ${route.duration}. Stay safe, ${name}! 🏁`;
         const endAlert = await sendSMS(phone, endMsg);
-        const j = activeJourneys.get(phone);
-        if (j) {
-          j.alerts.push({ ...endAlert, type: 'journey_end' });
-          j.status = 'completed';
-        }
+        j.alerts.push({ ...endAlert, type: 'journey_end', message: endMsg });
+        j.status = 'completed';
         return;
       }
 
       try {
-        // Get weather for current waypoint
-        const waypoint = route.waypoints[checkCount % route.waypoints.length];
-        const weather = await getWeather(waypoint?.name || destination);
+        // Pick current waypoint based on progress
+        const wpIndex = checkCount % (route.waypoints?.length || 1);
+        const waypoint = route.waypoints?.[wpIndex] || { name: destination };
 
-        // AI analyzes route safety
-        const aiAlert = await analyzeRoute(route, weather, route.emergencySpots);
-
-        // Send SMS alert
-        const smsEntry = await sendSMS(phone, `Manzil AI: ${aiAlert.message}`);
-
-        const j = activeJourneys.get(phone);
-        if (j) {
-          j.alerts.push({
-            ...smsEntry,
-            type: 'safety_alert',
-            riskLevel: aiAlert.riskLevel,
-            weather
-          });
-          j.currentWaypoint = waypoint;
-          j.checksCompleted = checkCount;
+        // Get real-time weather for this waypoint
+        let weather;
+        if (waypoint.lat && waypoint.lng) {
+          weather = await getWeatherForCoords(waypoint.lat, waypoint.lng);
+        } else {
+          weather = await getWeather(waypoint.name || destination);
         }
 
+        // Get nearby emergency spots for this waypoint
+        let nearbySpots = route.emergencySpots || [];
+        if (process.env.USE_REAL_APIS === 'true' && waypoint.lat) {
+          nearbySpots = await getNearbyEmergencySpots(waypoint.lat, waypoint.lng);
+        }
+
+        // AI analyzes the route safety
+        const aiAlert = await analyzeRoute(
+          { origin: route.origin, destination, distance: route.distance, duration: route.duration },
+          weather,
+          nearbySpots
+        );
+
+        const smsBody = `Manzil AI: ${aiAlert.message}`;
+        const smsEntry = await sendSMS(phone, smsBody);
+
+        j.alerts.push({
+          ...smsEntry,
+          message: smsBody,
+          type: 'safety_alert',
+          riskLevel: aiAlert.riskLevel,
+          weather,
+          waypoint: waypoint.name,
+        });
+        j.currentWaypoint = waypoint;
+        j.checksCompleted = checkCount;
+
       } catch (err) {
-        console.error('Alert loop error:', err.message);
+        console.error(`Alert loop error (check ${checkCount}):`, err.message);
       }
 
-    }, 15000); // 15 seconds between alerts (demo)
+    }, 15000); // Alert every 15 seconds
 
-    // Store journey state
+    // ── Store journey state ────────────────────────────────────
     const journey = {
-      phone, name, origin, destination,
-      route, alerts,
+      phone, name,
+      origin: route.origin || origin,
+      destination,
+      route,
+      alerts,
       status: 'active',
       startedAt: new Date().toISOString(),
-      intervalId, checksCompleted: 0
+      intervalId,
+      checksCompleted: 0,
     };
     activeJourneys.set(phone, journey);
 
@@ -104,13 +133,16 @@ router.post('/start', async (req, res) => {
       success: true,
       message: 'Journey started! SMS alerts will be sent every 15 seconds.',
       journey: {
-        destination, origin, route,
+        destination,
+        origin: route.origin || origin,
+        route,
         status: 'active',
-        startedAt: journey.startedAt
+        startedAt: journey.startedAt,
       }
     });
 
   } catch (err) {
+    console.error('Start journey error:', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -128,9 +160,23 @@ router.post('/stop', async (req, res) => {
     clearInterval(journey.intervalId);
     journey.status = 'stopped';
 
-    await sendSMS(phone, `🛑 Manzil AI: Journey tracking stopped. Stay safe!`);
+    const stopMsg = `🛑 Manzil AI: Journey to ${journey.destination} stopped. You've traveled approx. ${journey.route?.distance}. Stay safe, ${journey.name}!`;
+    try {
+      await sendSMS(phone, stopMsg);
+    } catch (e) {
+      console.warn('⚠️ Journey stop SMS failed:', e.message);
+    }
 
-    res.json({ success: true, message: 'Journey stopped', alerts: journey.alerts });
+    res.json({
+      success: true,
+      message: 'Journey stopped',
+      summary: {
+        destination: journey.destination,
+        checksCompleted: journey.checksCompleted,
+        alertsSent: journey.alerts.length,
+        duration: journey.startedAt,
+      }
+    });
 
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -147,11 +193,12 @@ router.get('/status/:phone', (req, res) => {
     success: true,
     status: journey.status,
     destination: journey.destination,
+    origin: journey.origin,
     route: journey.route,
     checksCompleted: journey.checksCompleted,
     alertCount: journey.alerts.length,
     currentWaypoint: journey.currentWaypoint,
-    startedAt: journey.startedAt
+    startedAt: journey.startedAt,
   });
 });
 

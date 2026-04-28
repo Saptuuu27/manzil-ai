@@ -3,7 +3,7 @@ import { register, verifyOtp } from '../api'
 import { useToast } from '../hooks/useToast'
 import { ToastContainer, BtnContent } from '../components/UI'
 
-const POPULAR_CITIES = ['Delhi', 'Mumbai', 'Bangalore', 'Chandigarh', 'Lahore', 'Karachi', 'Islamabad']
+const POPULAR_CITIES = ['Delhi', 'Mumbai', 'Bangalore', 'Chandigarh', 'Chennai', 'Kolkata', 'Pune']
 
 export default function RegisterPage({ onRegistered }) {
   const [step, setStep] = useState('form') // 'form' | 'otp'
@@ -58,12 +58,10 @@ export default function RegisterPage({ onRegistered }) {
       const res = await register(form)
       if (res.data.demoOtp) {
         setDemoOtp(res.data.demoOtp)
-        success(`Demo OTP: ${res.data.demoOtp} (auto-filled below)`)
-        // Auto-fill OTP in demo mode
-        const digits = res.data.demoOtp.split('')
-        setOtp(digits)
+        // Show OTP in badge — user must type it themselves (no auto-fill)
+        info(`Demo OTP: ${res.data.demoOtp} — Enter it below`)
       } else {
-        success('OTP sent to your phone!')
+        success('✅ OTP sent to your phone via SMS!')
       }
       setStep('otp')
     } catch (err) {
@@ -232,8 +230,9 @@ export default function RegisterPage({ onRegistered }) {
           </p>
 
           {demoOtp && (
-            <div className="badge badge-info" style={{ marginBottom: 16, fontSize: '0.8rem' }}>
-              🎯 Demo OTP: <strong>{demoOtp}</strong> (auto-filled)
+            <div style={{ marginBottom:16, padding:'10px 14px', background:'rgba(0,212,255,0.08)', border:'1px solid rgba(0,212,255,0.3)', borderRadius:'var(--border-radius-sm)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <span className="text-xs" style={{ color:'var(--accent-secondary)' }}>🎯 Demo OTP (type it below):</span>
+              <strong style={{ fontFamily:'var(--font-display)', fontSize:'1.2rem', letterSpacing:'0.2em', color:'var(--text-primary)' }}>{demoOtp}</strong>
             </div>
           )}
 

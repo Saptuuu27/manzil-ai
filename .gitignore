@@ -5,8 +5,15 @@ node_modules/
 # Build outputs
 frontend/dist/
 frontend/.vite/
+frontend/android/app/build/
+frontend/android/.gradle/
+frontend/android/.idea/
 
-# Environment
+# Bundled Node (large - not needed on GitHub)
+node-v20.11.1-win-x64/
+npm-bootstrap/
+
+# Environment (sensitive keys)
 .env
 backend/.env
 **/.env.local
@@ -26,13 +33,13 @@ Thumbs.db
 
 # Firebase
 .firebase/
-firebase-debug.log
+firebase-debug.log*
 
 # Capacitor / Android build
-android/
-ios/
+frontend/android/
 *.apk
 *.aab
 
 # Temp
 *.tmp
+npm-path.txt

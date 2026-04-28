@@ -6,7 +6,7 @@ import { ToastContainer, BtnContent } from '../components/UI'
 const QUICK_DESTINATIONS = [
   { label: 'Delhi → Chandigarh', icon: '🛣️' },
   { label: 'Mumbai → Pune',      icon: '🏔️' },
-  { label: 'Lahore → Islamabad', icon: '🚗' },
+  { label: 'Chennai → Bangalore', icon: '🚗' },
   { label: 'Bangalore → Mysore', icon: '🌿' },
 ]
 

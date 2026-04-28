@@ -3,19 +3,16 @@ import RegisterPage from './pages/RegisterPage'
 import HomePage     from './pages/HomePage'
 import JourneyPage  from './pages/JourneyPage'
 
-// Load persisted user from localStorage
-function loadUser() {
-  try { return JSON.parse(localStorage.getItem('manzil_user')) } catch { return null }
-}
+// ─── No localStorage persistence — real industry app ───────────
+// Users must log in every session (no auto-saved data)
 
 export default function App() {
-  const [screen, setScreen] = useState(loadUser() ? 'home' : 'register')
-  const [user, setUser] = useState(loadUser)
+  const [screen, setScreen] = useState('register')
+  const [user, setUser] = useState(null)
   const [journey, setJourney] = useState(null)
 
   const handleRegistered = (userData) => {
     setUser(userData)
-    localStorage.setItem('manzil_user', JSON.stringify(userData))
     setScreen('home')
   }
 
@@ -30,7 +27,6 @@ export default function App() {
   }
 
   const handleLogout = () => {
-    localStorage.removeItem('manzil_user')
     setUser(null)
     setJourney(null)
     setScreen('register')
@@ -45,7 +41,10 @@ export default function App() {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '12px 20px 8px',
           borderBottom: '1px solid var(--border-subtle)',
-          position: 'relative', zIndex: 2
+          position: 'relative', zIndex: 2,
+          background: 'rgba(6,6,18,0.8)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: '1.2rem' }}>🧭</span>
@@ -65,13 +64,18 @@ export default function App() {
                 </span>
               </div>
             )}
+            {user && (
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginRight: 4 }}>
+                {user.name}
+              </span>
+            )}
             <button
               onClick={handleLogout}
               title="Logout"
               style={{
-                background: 'none', border: 'none', color: 'var(--text-muted)',
-                cursor: 'pointer', fontSize: '0.75rem', padding: '4px 8px',
-                borderRadius: 6, transition: 'color 0.2s'
+                background: 'rgba(255,82,82,0.1)', border: '1px solid rgba(255,82,82,0.3)',
+                color: 'var(--accent-red)', cursor: 'pointer', fontSize: '0.72rem',
+                padding: '4px 10px', borderRadius: 6, transition: 'all 0.2s', fontWeight: 600,
               }}
             >
               ↩ Logout
