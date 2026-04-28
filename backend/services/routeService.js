@@ -6,7 +6,7 @@
 
 const axios = require('axios');
 
-// ─── Mock Fallback ─────────────────────────────────────────────
+// ─── Mock Fallback (route-aware) ───────────────────────────────
 const mockRoute = {
   waypoints: [
     { lat: 28.6139, lng: 77.2090, name: 'New Delhi' },
@@ -18,22 +18,32 @@ const mockRoute = {
   ],
   distance: '250 km',
   duration: '4 hrs 30 mins',
-  emergencySpots: [
-    { type: 'hospital', name: 'Civil Hospital Rohtak', lat: 28.8955, lng: 76.6066, distance: '45km' },
-    { type: 'hospital', name: 'General Hospital Ambala', lat: 30.3782, lng: 76.7767, distance: '180km' },
-    { type: 'police', name: 'Panipat Police Station', lat: 29.3909, lng: 76.9635, distance: '120km' },
-    { type: 'police', name: 'Chandigarh Sector 17 Police', lat: 30.7411, lng: 76.7875, distance: '248km' },
-  ]
 };
 
+// Generate location-aware mock spots near the route's actual coordinates
+function generateMockSpots(waypoints) {
+  if (!waypoints || waypoints.length === 0) return [];
+  const mid = waypoints[Math.floor(waypoints.length / 2)];
+  const start = waypoints[0];
+  const end = waypoints[waypoints.length - 1];
+  return [
+    { type: 'hospital', name: `District Hospital (near ${start.name || 'Start'})`, lat: start.lat, lng: start.lng, distance: '2.5km', address: '' },
+    { type: 'hospital', name: `General Hospital (near ${mid.name || 'Midpoint'})`, lat: mid.lat, lng: mid.lng, distance: '5.0km', address: '' },
+    { type: 'police', name: `Police Station (near ${mid.name || 'Midpoint'})`, lat: mid.lat + 0.01, lng: mid.lng + 0.01, distance: '3.2km', address: '' },
+    { type: 'police', name: `Traffic Police (near ${end.name || 'Destination'})`, lat: end.lat, lng: end.lng, distance: '1.8km', address: '' },
+  ];
+}
+
 function generateMockRoute(origin, destination) {
-  return {
+  const route = {
     ...mockRoute,
     origin,
     destination,
     duration: `${Math.floor(3 + Math.random() * 3)} hrs ${Math.floor(Math.random() * 60)} mins`,
     distance: `${Math.floor(150 + Math.random() * 300)} km`,
   };
+  route.emergencySpots = generateMockSpots(mockRoute.waypoints);
+  return route;
 }
 
 // ─── Geocode city name → [lng, lat] using Nominatim (free) ────
@@ -209,8 +219,8 @@ async function getRoute(origin, destination) {
           route.emergencySpots = allSpots.slice(0, 8);
           console.log(`🏥 [Overpass] Found ${route.emergencySpots.length} route-based emergency spots`);
         } catch (e) {
-          console.warn('Overpass API failed:', e.message);
-          route.emergencySpots = mockRoute.emergencySpots;
+          console.warn('Overpass API failed, using route-aware fallback:', e.message);
+          route.emergencySpots = generateMockSpots(route.waypoints);
         }
       }
 
