@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react'
-import { register, verifyOtp } from '../api'
+import { useState, useRef, useEffect } from 'react'
+import { register, verifyOtp, healthCheck } from '../api'
 import { useToast } from '../hooks/useToast'
 import { ToastContainer, BtnContent } from '../components/UI'
 
@@ -11,8 +11,22 @@ export default function RegisterPage({ onRegistered }) {
   const [otp, setOtp] = useState(['', '', '', '', '', ''])
   const [demoOtp, setDemoOtp] = useState('')
   const [loading, setLoading] = useState(false)
+  const [backendStatus, setBackendStatus] = useState('checking') // 'checking' | 'ok' | 'error'
   const otpRefs = useRef([])
   const { toasts, success, error, info } = useToast()
+
+  // ── Backend connectivity check on mount ─────────────────────
+  useEffect(() => {
+    const check = async () => {
+      try {
+        await healthCheck()
+        setBackendStatus('ok')
+      } catch {
+        setBackendStatus('error')
+      }
+    }
+    check()
+  }, [])
 
   // ── Form helpers ────────────────────────────────────────────
   const updateForm = (field) => (e) => setForm(p => ({ ...p, [field]: e.target.value }))
@@ -65,7 +79,11 @@ export default function RegisterPage({ onRegistered }) {
       }
       setStep('otp')
     } catch (err) {
-      error(err.response?.data?.error || 'Registration failed — is the backend running?')
+      const msg = err.code === 'ECONNABORTED' || err.message?.includes('timeout')
+        ? '⏳ Server is waking up (cold start). Please wait 30s and try again.'
+        : err.response?.data?.error || `Network error: ${err.message || 'Cannot reach backend'}`
+      error(msg)
+      setBackendStatus('error')
     } finally {
       setLoading(false)
     }
@@ -114,6 +132,16 @@ export default function RegisterPage({ onRegistered }) {
         <span className="brand-icon">🧭</span>
         <h1 className="brand-title">Manzil AI</h1>
         <p className="brand-tagline">AI-powered safety navigation</p>
+        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', display: 'inline-block',
+            background: backendStatus === 'ok' ? 'var(--accent-green)' : backendStatus === 'error' ? 'var(--accent-red)' : 'var(--accent-orange)',
+            animation: backendStatus === 'checking' ? 'pulse 1s infinite' : 'none' }} />
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+            {backendStatus === 'checking' ? 'Connecting to server…' :
+             backendStatus === 'ok' ? 'Server connected ✓' :
+             'Server unreachable — check network'}
+          </span>
+        </div>
       </div>
 
       {/* ── Feature Pills ─────────────────────────────────── */}
