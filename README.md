@@ -17,10 +17,29 @@
 | 🌦️ Weather Alerts | ✅ Working | Live data via OpenWeatherMap (1000 req/day) |
 | 🤖 AI Safety Analysis | ✅ Working | Real Gemini 1.5 Flash responses |
 | 📨 SMS Alerts | ⚠️ Partial | Depends on Fast2SMS free credits; logs to console if exhausted |
-| 📶 Mobile Data | ✅ Fixed | 30s timeout + retry logic added; works on 4G/5G |
+| 📶 Mobile Data (Jio) | ⚠️ DNS Fix Needed | Jio blocks Railway.app domain — change DNS to fix (see below) |
+| 📶 Mobile Data (Others) | ✅ Working | Airtel, Vi, BSNL work without any changes |
 | 🔄 Cold Start Delay | ⚠️ Expected | First request after inactivity may take 30–60s (Railway free tier sleeps) |
 
 > **For full production use:** Deploy backend on a paid Railway/Render plan, add paid SMS credits, and upgrade API tiers.
+
+---
+
+## 📶 Jio Users — Fix "Server Unreachable" in 1 Minute
+
+Jio's DNS servers block `railway.app` domains. Fix by switching to Cloudflare DNS:
+
+### On Android:
+1. Go to **Settings → Network & Internet → Private DNS**
+2. Select **"Private DNS provider hostname"**
+3. Enter: `one.one.one.one`
+4. Tap **Save** → done ✅
+
+### Alternative (any device):
+- Use **1.1.1.1 app** by Cloudflare (free, one-tap fix)
+- Or change WiFi DNS to `1.1.1.1` and `1.0.0.1`
+
+Once DNS is changed, the app works perfectly on Jio 4G/5G.
 
 ---
 
