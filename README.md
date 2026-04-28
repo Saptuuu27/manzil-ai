@@ -4,6 +4,26 @@
 
 ---
 
+## ⚠️ Demo / Hackathon Build — Known Limitations
+
+> This APK is a **hackathon prototype**. The backend runs on Railway's free tier and most core APIs are on free-tier limits. Please read below before testing.
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| 📱 App Install & UI | ✅ Working | Full dark-themed mobile app |
+| 🔐 OTP Registration | ⚠️ Partial | Fast2SMS free credits may be exhausted — OTP shown on screen as fallback |
+| 🗺️ Route Calculation | ✅ Working | Real routes via OpenRouteService (2000 req/day limit) |
+| 🏥 Emergency Spots | ⚠️ Partial | Real Overpass API data; may fall back to route-based estimates if API times out |
+| 🌦️ Weather Alerts | ✅ Working | Live data via OpenWeatherMap (1000 req/day) |
+| 🤖 AI Safety Analysis | ✅ Working | Real Gemini 1.5 Flash responses |
+| 📨 SMS Alerts | ⚠️ Partial | Depends on Fast2SMS free credits; logs to console if exhausted |
+| 📶 Mobile Data | ✅ Fixed | 30s timeout + retry logic added; works on 4G/5G |
+| 🔄 Cold Start Delay | ⚠️ Expected | First request after inactivity may take 30–60s (Railway free tier sleeps) |
+
+> **For full production use:** Deploy backend on a paid Railway/Render plan, add paid SMS credits, and upgrade API tiers.
+
+---
+
 ## 🚀 Key Features
 
 - 📱 **Mobile-First PWA** — Premium dark-themed React UI, fully installable as an Android APK via Capacitor
